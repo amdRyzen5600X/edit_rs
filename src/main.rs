@@ -1,14 +1,12 @@
-use std::fs::File;
+use std::env::args;
 
-use ropey::Rope;
+use edit_rs::file_handler::FileHandler;
 
 fn main() -> edit_rs::app::Result<()> {
-    let app = edit_rs::app::App {
-        file_name: "sometext.txt".to_string(),
-        contents: Rope::from_reader(File::open("sometext.txt").expect("no such a file"))
-            .expect("unnable to create a Rope from reader"),
-        ..Default::default()
-    };
+    let file_name = args().nth(1);
+    let file_handler = FileHandler::new(file_name);
+
+    let app = edit_rs::app::App::new(file_handler);
     let terminal = ratatui::init();
     let app_result = app.run(terminal);
     ratatui::restore();

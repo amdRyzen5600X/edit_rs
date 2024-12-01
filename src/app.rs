@@ -10,14 +10,16 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 
+use crate::{errors::FileNameError, file_handler::FileHandler};
+
 pub type Result<T> = result::Result<T, Box<dyn Error>>;
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug,Default, Clone)]
 pub struct App {
     pub mode: Mode,
-    pub contents: ropey::Rope,
-    pub file_name: String,
+    pub file_handler: FileHandler,
     pub scroll_bar_state: usize,
+    footer_text: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,6 +48,9 @@ impl Default for Mode {
 }
 
 impl App {
+    pub fn new(file_handler: FileHandler) -> Self {
+        Self { mode: Mode::default(), file_handler, scroll_bar_state: usize::default(), footer_text: "placeholder".to_string() }
+    }
     pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
         while self.is_running() {
             terminal.draw(|frame| self.clone().draw(frame))?;
@@ -77,6 +82,7 @@ impl App {
     fn handle_key_press(&mut self, key: KeyEvent) {
         match key.code {
             event::KeyCode::Char('q') if self.mode == Mode::Normal => self.mode = Mode::Quit,
+            event::KeyCode::Char('w') if self.mode == Mode::Normal => self.save_file(),
             event::KeyCode::Char('i') if self.mode == Mode::Normal => self.mode = Mode::Inesrt,
             event::KeyCode::Char(':') if self.mode == Mode::Normal => self.mode = Mode::Command,
             event::KeyCode::Esc if self.mode == Mode::Inesrt || self.mode == Mode::Command => {
@@ -101,10 +107,10 @@ impl Widget for App {
         Block::new()
             .style(Style::new().bg(Color::Black))
             .render(area, buf);
-        Paragraph::new(Text::raw(&self.file_name))
+        Paragraph::new(Text::raw(&self.file_handler.file_name.clone().unwrap_or_default()))
             .white()
             .render(header, buf);
-        Paragraph::new(Text::raw(&self.contents))
+        Paragraph::new(Text::raw(&self.file_handler.file_contents))
             .white()
             .block(Block::bordered())
             .render(contents, buf);
@@ -113,6 +119,17 @@ impl Widget for App {
 }
 
 impl App {
+    fn save_file(&mut self) {
+        match self.file_handler.save_file() {
+            Ok(_) => {self.footer_text = "file saved".to_string()},
+            Err(err) => {
+                if format!("{}", err) == format!("{}", FileNameError{}) {
+                    self.footer_text = "provide a file name".to_string();
+                }
+            },
+        }
+    }
+
     fn render_footer(&self, area: Rect, buff: &mut Buffer) {
         let horiz = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]);
         let [left, right] = horiz.areas(area);
@@ -120,7 +137,7 @@ impl App {
             .white()
             .block(Block::bordered())
             .render(left, buff);
-        Paragraph::new("placeholder for line number")
+        Paragraph::new(self.footer_text.as_str())
             .white()
             .block(Block::bordered())
             .render(right, buff);
